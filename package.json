@@ -2,7 +2,7 @@
   "name": "acp-client",
   "displayName": "ACP Client",
   "description": "Agent Client Protocol client for VS Code — connect to GitHub Copilot, Claude Code, Gemini CLI, Qwen Code, Codex CLI, OpenCode, OpenClaw, Kiro CLI, Hermes Agent, and any ACP-compatible AI coding agent",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "formulahendry",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -52,6 +52,12 @@
           "id": "acp-chat",
           "name": "Chat",
           "type": "webview"
+        },
+        {
+          "type": "webview",
+          "id": "embedderMonitor.serialLog",
+          "name": "Embedder Monitor",
+          "contextualTitle": "Monitor"
         }
       ]
     },
@@ -157,6 +163,14 @@
         "command": "acp.restartAgent",
         "title": "ACP: Restart Agent",
         "icon": "$(debug-restart)"
+      },
+      {
+        "command": "embedderMonitor.focus",
+        "title": "Focus Embedder Monitor"
+      },
+      {
+        "command": "acp.serial.diag",
+        "title": "ACP: Embedder Monitor Diagnostics"
       }
     ],
     "menus": {
@@ -388,6 +402,31 @@
           "type": "boolean",
           "default": true,
           "description": "Log all ACP protocol traffic to the output channel."
+        },
+        "embedderMonitor.defaultPort": {
+          "type": "string",
+          "default": "",
+          "description": "Default serial port path. Leave empty to auto-pick the first detected port (cross-platform)."
+        },
+        "embedderMonitor.defaultBaud": {
+          "type": "number",
+          "default": 115200,
+          "description": "Default baud rate."
+        },
+        "embedderMonitor.assertControlSignals": {
+          "type": "boolean",
+          "default": true,
+          "description": "After opening a real serial port, assert DTR=true and RTS=true. Required for many USB-Serial chips (CH340, CP2102, ESP32 boards) to leave reset state and emit boot logs. Disable only if your device misbehaves with these signals asserted."
+        },
+        "embedderMonitor.fallbackToVirtualOnConnectError": {
+          "type": "boolean",
+          "default": false,
+          "description": "When opening a real serial port fails, automatically fall back to the virtual simulator so the rest of the ACP pipeline can still be exercised. Useful for development without hardware."
+        },
+        "embedderMonitor.verboseLog": {
+          "type": "boolean",
+          "default": false,
+          "description": "Emit DEBUG-level diagnostics to the 'Embedder Monitor' output channel (per-event open/data/error tracing)."
         }
       }
     }
@@ -406,11 +445,12 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.1",
     "@vscode/extension-telemetry": "^1.5.0",
-    "marked": "^15.0.0"
+    "marked": "^15.0.0",
+    "serialport": "^13.0.0"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.6",
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.41",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

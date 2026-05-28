@@ -9,6 +9,7 @@ import { FileSystemHandler } from '../handlers/FileSystemHandler';
 import { TerminalHandler } from '../handlers/TerminalHandler';
 import { PermissionHandler } from '../handlers/PermissionHandler';
 import { SessionUpdateHandler } from '../handlers/SessionUpdateHandler';
+import { SerialManager } from './SerialManager';
 import { log, logError, logTraffic } from '../utils/Logger';
 import { version as extensionVersion } from '../../package.json';
 
@@ -27,6 +28,7 @@ export class ConnectionManager {
 
   constructor(
     private readonly sessionUpdateHandler: SessionUpdateHandler,
+    private readonly serialManager: SerialManager,
   ) {}
 
   /**
@@ -60,6 +62,7 @@ export class ConnectionManager {
       terminalHandler,
       permissionHandler,
       this.sessionUpdateHandler,
+      this.serialManager,
     );
 
     // Create connection — toClient factory receives the Agent proxy

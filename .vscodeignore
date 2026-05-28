@@ -8,6 +8,14 @@ node_modules/**
 *.map
 *.ts
 !dist/**
+!node_modules/serialport/**
+!node_modules/@serialport/**
+# Transitive runtime deps of serialport that npm may hoist to the root
+# node_modules level. node-gyp-build is the loader that resolves the
+# .node prebuild at runtime — without it `require('serialport')` throws.
+!node_modules/node-gyp-build/**
+!node_modules/debug/**
+!node_modules/ms/**
 tsconfig.json
 webpack.config.js
 eslint.config.mjs

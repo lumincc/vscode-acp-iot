@@ -4,13 +4,15 @@ import { AgentManager } from './core/AgentManager';
 import { ConnectionManager } from './core/ConnectionManager';
 import { SessionManager } from './core/SessionManager';
 import { SessionHistoryStore } from './core/SessionHistoryStore';
+import { SerialManager } from './core/SerialManager';
 import { SessionUpdateHandler } from './handlers/SessionUpdateHandler';
 import { SessionTreeProvider } from './ui/SessionTreeProvider';
 import { StatusBarManager } from './ui/StatusBarManager';
 import { ChatWebviewProvider } from './ui/ChatWebviewProvider';
+import { SerialMonitorViewProvider } from './ui/SerialMonitorViewProvider';
 import { getAgentNames } from './config/AgentConfig';
 import { fetchRegistry } from './config/RegistryClient';
-import { log, logError, disposeChannels, getOutputChannel, getTrafficChannel } from './utils/Logger';
+import { log, logError, disposeChannels, getOutputChannel, getTrafficChannel, getSerialChannel, logSerial } from './utils/Logger';
 import { initTelemetry, sendEvent } from './utils/TelemetryManager';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -23,7 +25,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // --- Core services ---
   const sessionUpdateHandler = new SessionUpdateHandler();
   const agentManager = new AgentManager();
-  const connectionManager = new ConnectionManager(sessionUpdateHandler);
+  const serialManager = new SerialManager();
+  const connectionManager = new ConnectionManager(sessionUpdateHandler, serialManager);
   const sessionManager = new SessionManager(
     agentManager,
     connectionManager,
@@ -52,6 +55,16 @@ export function activate(context: vscode.ExtensionContext): void {
   const chatViewRegistration = vscode.window.registerWebviewViewProvider(
     ChatWebviewProvider.viewType,
     chatWebviewProvider,
+    { webviewOptions: { retainContextWhenHidden: true } },
+  );
+
+  const serialMonitorWebviewProvider = new SerialMonitorViewProvider(
+    context.extensionUri,
+    serialManager,
+  );
+  const serialMonitorViewRegistration = vscode.window.registerWebviewViewProvider(
+    SerialMonitorViewProvider.viewType,
+    serialMonitorWebviewProvider,
     { webviewOptions: { retainContextWhenHidden: true } },
   );
 
@@ -256,6 +269,29 @@ export function activate(context: vscode.ExtensionContext): void {
   const showLogCmd = vscode.commands.registerCommand('acp.showLog', () => {
     sendEvent('command/showLog');
     getOutputChannel().show();
+  });
+
+  // Focus Embedder Monitor
+  const focusEmbedderMonitorCmd = vscode.commands.registerCommand('embedderMonitor.focus', () => {
+    vscode.commands.executeCommand('embedderMonitor.serialLog.focus');
+  });
+
+  // Embedder Monitor diagnostics: print mode, native load state, current
+  // port and recent errors to the dedicated output channel.
+  const serialDiagCmd = vscode.commands.registerCommand('acp.serial.diag', async () => {
+    const channel = getSerialChannel();
+    channel.show(true);
+    const summary = serialManager.diagnose();
+    logSerial(summary);
+    try {
+      const ports = await serialManager.listPorts();
+      logSerial(`Available ports (${ports.length}):`);
+      for (const p of ports) {
+        logSerial(`  - ${p.label}${p.virtual ? ' [virtual]' : ''}`);
+      }
+    } catch (e) {
+      logError('serial.diag listPorts failed', e);
+    }
   });
 
   // Show Traffic
@@ -497,6 +533,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     treeView,
     chatViewRegistration,
+    serialMonitorViewRegistration,
     statusBarManager,
     connectAgentCmd,
     newConversationCmd,
@@ -506,6 +543,8 @@ export function activate(context: vscode.ExtensionContext): void {
     cancelTurnCmd,
     restartAgentCmd,
     showLogCmd,
+    focusEmbedderMonitorCmd,
+    serialDiagCmd,
     showTrafficCmd,
     setModeCmd,
     setModelCmd,
@@ -524,6 +563,8 @@ export function activate(context: vscode.ExtensionContext): void {
         sessionManager.dispose();
         sessionUpdateHandler.dispose();
         chatWebviewProvider.dispose();
+        serialMonitorWebviewProvider.dispose();
+        serialManager.dispose();
         sessionTreeProvider.dispose();
         disposeChannels();
       },

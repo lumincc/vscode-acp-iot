@@ -4,6 +4,37 @@ All notable changes to the "vscode-acp" extension will be documented in this fil
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.3.0] - 2026-05-28
+
+### Added
+- **EMBEDDER MONITOR sidebar** (`embedderMonitor.serialLog` view): a dark-themed serial console with port / baud / newline pickers, command input, and live log textarea.
+- **ACP serial extension protocol** — agents can now drive hardware over the standard ACP socket:
+  - Request `acp:serial_connect` ({ port, baud })
+  - Request `acp:serial_disconnect`
+  - Request `acp:serial_write` ({ data, newline })
+  - Notification `acp:serial_data` ({ data }) — streamed live to the agent
+- **VirtualSerialSimulator** transparent fallback when the native `serialport` binary fails to load (ABI mismatch / web environment / missing prebuild).
+- **Cross-channel diagnostics**: dedicated `Embedder Monitor` output channel + `ACP: Embedder Monitor Diagnostics` command (`acp.serial.diag`).
+- **Mode badge in the webview header** (`REAL` / `VIRTUAL`) and `manufacturer / friendlyName` annotations on the port dropdown.
+- New configuration:
+  - `embedderMonitor.defaultPort` (default empty — auto-pick first port, cross-platform)
+  - `embedderMonitor.defaultBaud` (default `115200`)
+  - `embedderMonitor.assertControlSignals` (default `true`) — assert DTR/RTS after open so CH340 / CP2102 / ESP32 boards leave reset state
+  - `embedderMonitor.fallbackToVirtualOnConnectError` (default `false`) — auto-fallback to virtual simulator on real-port open failure
+  - `embedderMonitor.verboseLog` (default `false`) — DEBUG-level event tracing
+
+### Fixed (hotfix round on the v0.3.0 first cut)
+- **Packaging dropped `node-gyp-build` / `debug` / `ms`** — the hoisted runtime dependencies of `@serialport/bindings-cpp` were excluded by the `.vscodeignore` allowlist, so installed `.vsix` had only the prebuilt `.node` binary but no loader to bind it. `require('serialport')` then threw `Cannot find module 'node-gyp-build'` and the manager silently fell back to the virtual simulator (Port dropdown showed only `VSIM1/2/3` on real ESP32 setups). `.vscodeignore` now un-ignores these three hoisted modules.
+- **"Connected but textarea empty"** — caused by autoOpen / listener race + missing DTR/RTS. Now uses `autoOpen:false` + explicit `open()` after listeners are attached, then `set({dtr:true, rts:true})`.
+- **`listPorts` and `connect` racing on `require('serialport')`** — the native module is now loaded once at activation and cached; `currentMode` is single-writer.
+- **`close` / `error` events not forwarded to UI** — UI could get stuck in "connected" state. Now `onStatus` broadcasts every transition.
+- **Webview ringBuffer / `restoreHistory` race** — incremental `onData` could be clobbered by the bootstrap snapshot. Webview now uses a `bootstrapped` flag.
+- **macOS-only default port `/dev/cu.debug-console`** replaced with empty default for cross-platform behavior.
+
+### Changed
+- Webpack treats `serialport` as `externals` and `.vscodeignore` ships `node_modules/serialport` and `node_modules/@serialport` so the native binary is loaded from the packaged extension at runtime.
+- `SerialManager.disconnect()` is now `async` (awaits the underlying close callback). Callers must `await` it.
+
 ## [0.2.0] - 2026-05-16
 
 ### Added
