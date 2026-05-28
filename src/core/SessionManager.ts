@@ -23,18 +23,28 @@ import { getAgentConfigs } from '../config/AgentConfig';
 import { log, logError } from '../utils/Logger';
 import { sendEvent, sendError } from '../utils/TelemetryManager';
 
-const SERIAL_TOOL_CONTRACT = `[System: You have access to the following serial port tools via extMethod:
-- acp:serial_list — list available serial ports
-- acp:serial_status — get current connection status (isOpen, path, baud, mode)
-- acp:serial_connect — connect to a port (params: port, baud)
-- acp:serial_write — send data (params: data, newline)
-- acp:serial_disconnect — disconnect from the port
-- acp:serial_read_snapshot — read recent serial buffer (params: limit)
+const SERIAL_TOOL_CONTRACT = `[System: You have access to serial port hardware tools. To use a tool, output the tool call on its own line using this EXACT format:
 
-Serial data and status changes will be pushed via extNotification:
+[SERIAL_CALL:serial_list]{}
+[SERIAL_CALL:serial_status]{}
+[SERIAL_CALL:serial_connect]{"port":"COM3","baud":115200}
+[SERIAL_CALL:serial_write]{"data":"AT\\r\\n"}
+[SERIAL_CALL:serial_disconnect]{}
+[SERIAL_CALL:serial_read_snapshot]{"limit":50}
+
+Tool descriptions:
+- serial_list — list available serial ports (no args)
+- serial_status — get current connection status (isOpen, path, baud, mode)
+- serial_connect — connect to a port (args: port, baud)
+- serial_write — send data (args: data, newline - default "\\n")
+- serial_disconnect — disconnect from port (no args)
+- serial_read_snapshot — read recent serial buffer (args: limit, default 50)
+
+IMPORTANT: Output the [SERIAL_CALL:...] line and wait. The system will execute it and show you the result.
+
+Serial data notifications:
 - acp:serial_data — incoming serial data
-- acp:serial_status_changed — connection status changes (connected/disconnected/error)]`;
-
+- acp:serial_status_changed — connection status changes]`;
 export interface SessionInfo {
   sessionId: string;
   agentId: string;
