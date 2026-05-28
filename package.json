@@ -381,6 +381,14 @@
                 "acp"
               ],
               "env": {}
+            },
+            "barecode": {
+              "command": "node",
+              "args": [
+                "../AI-Code-CLI/bin/cli.js",
+                "acp"
+              ],
+              "env": {}
             }
           }
         },
