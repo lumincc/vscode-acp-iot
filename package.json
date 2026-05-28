@@ -382,14 +382,7 @@
               ],
               "env": {}
             },
-            "barecode": {
-              "command": "node",
-              "args": [
-                "../AI-Code-CLI/bin/cli.js",
-                "acp"
-              ],
-              "env": {}
-            }
+            "barecode": { "command": "barecode", "args": ["acp"], "env": {} }
           }
         },
         "acp.autoApprovePermissions": {
