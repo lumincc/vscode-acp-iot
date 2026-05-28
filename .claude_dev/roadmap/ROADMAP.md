@@ -15,7 +15,7 @@
                            |
                            v
 +--------------------------------------------------------+
-| Phase 2: "EMBEDDER MONITOR" 串口集成 + Chat-Agent 打通 (v0.3.0) |
+| Phase 2: "EMBEDDER MONITOR" 串口集成 + Chat-Agent 打通 (v0.3.1) [已完成] |
 | - [已完成] 物理串口管理、ACP 协议补齐、Chat /serial 命令、事件映射、Agent 工具契约、CLI extMethod 桥接 |
 | - 设计暗色极简、复刻硬件控制终端的侧边栏 Webview UI         |
 | - 扩展 ACP 协议：新增 `acp:serial_*` 接口实现 Agent 控制 |
@@ -41,7 +41,7 @@
 
 ---
 
-## 当前焦点：v0.3.0 嵌入式监控集成
+## 当前焦点：v0.3.1 — 已交付，下一步 v0.4.0 硬件检测与多协议融合
 
 当前阶段的核心目标是完成 **物理/虚拟串口通道**、**侧边栏 Embedder Webview UI** 以及 **ACP 自定义串口 API**。
 
