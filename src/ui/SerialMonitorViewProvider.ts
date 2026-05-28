@@ -6,8 +6,6 @@ export class SerialMonitorViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'embedderMonitor.serialLog';
 
   private view?: vscode.WebviewView;
-  private ringBuffer: string[] = [];
-  private readonly maxBufferSize = 50000; // approximate character cap for restored history
   private dataListener?: vscode.Disposable;
   private statusListener?: vscode.Disposable;
 
@@ -20,9 +18,8 @@ export class SerialMonitorViewProvider implements vscode.WebviewViewProvider {
     private readonly extensionUri: vscode.Uri,
     private readonly serialManager: SerialManager,
   ) {
-    // Always keep the ring buffer in sync, even when the webview is hidden.
+    // Forward serial data to the webview when visible.
     this.dataListener = this.serialManager.onData(e => {
-      this.appendBuffer(e.data);
       if (this.view) {
         try {
           this.view.webview.postMessage({ type: 'onData', data: e.data });
@@ -30,7 +27,7 @@ export class SerialMonitorViewProvider implements vscode.WebviewViewProvider {
           logSerialError('postMessage onData failed', err);
         }
       } else {
-        logSerialDebug(`onData buffered (${e.data.length} chars) — view not resolved yet`);
+        logSerialDebug(`onData (${e.data.length} chars) — view not resolved yet`);
       }
     });
 
@@ -79,15 +76,6 @@ export class SerialMonitorViewProvider implements vscode.WebviewViewProvider {
       case 'idle':
       default:
         break;
-    }
-  }
-
-  private appendBuffer(data: string): void {
-    this.ringBuffer.push(data);
-    let totalLen = this.ringBuffer.reduce((acc, val) => acc + val.length, 0);
-    while (totalLen > this.maxBufferSize && this.ringBuffer.length > 1) {
-      const removed = this.ringBuffer.shift();
-      totalLen -= removed?.length || 0;
     }
   }
 
@@ -181,10 +169,11 @@ export class SerialMonitorViewProvider implements vscode.WebviewViewProvider {
       case 'ready': {
         // Replay buffered output FIRST so the operator sees prior context,
         // then advertise the static load info / current status.
-        if (this.ringBuffer.length > 0) {
+        const recentData = this.serialManager.getRecentData();
+        if (recentData.length > 0) {
           view.webview.postMessage({
             type: 'restoreHistory',
-            data: this.ringBuffer.join(''),
+            data: recentData.join(''),
           });
         }
         view.webview.postMessage({

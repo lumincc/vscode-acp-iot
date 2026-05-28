@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { marked } from 'marked';
 import { SessionManager } from '../core/SessionManager';
+import { SerialManager } from '../core/SerialManager';
 import { SessionUpdateHandler, SessionUpdateListener } from '../handlers/SessionUpdateHandler';
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 import { logError } from '../utils/Logger';
@@ -15,12 +16,15 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private updateListener: SessionUpdateListener;
+  private serialDataListener?: vscode.Disposable;
+  private serialStatusListener?: vscode.Disposable;
   private _hasChatContent = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly sessionManager: SessionManager,
     private readonly sessionUpdateHandler: SessionUpdateHandler,
+    private readonly serialManager: SerialManager,
   ) {
     // Configure marked for safe rendering
     marked.setOptions({
@@ -33,6 +37,14 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       this.handleSessionUpdate(update);
     };
     this.sessionUpdateHandler.addListener(this.updateListener);
+
+    // Forward serial events to the chat webview
+    this.serialDataListener = this.serialManager.onData(e => {
+      this.postMessage({ type: 'serialData', data: e.data });
+    });
+    this.serialStatusListener = this.serialManager.onStatus(status => {
+      this.postMessage({ type: 'serialStatus', status });
+    });
   }
 
   /**
@@ -160,6 +172,12 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
    * Handle a prompt sent from the webview.
    */
   private async handleSendPrompt(text: string): Promise<void> {
+    // Check for local /serial commands first
+    if (text.trimStart().startsWith('/serial')) {
+      await this.handleSerialCommand(text.trim());
+      return;
+    }
+
     const activeId = this.sessionManager.getActiveSessionId();
     if (!activeId) {
       this.postMessage({
@@ -199,6 +217,99 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         message: e.message || 'Prompt failed',
       });
       this.postMessage({ type: 'promptEnd', stopReason: 'error' });
+    }
+  }
+
+  /**
+   * Handle local /serial commands without involving the agent.
+   */
+  private async handleSerialCommand(input: string): Promise<void> {
+    const parts = input.split(/\s+/);
+    const cmd = parts[1]?.toLowerCase();
+
+    try {
+      switch (cmd) {
+        case 'ports': {
+          const ports = await this.serialManager.listPorts();
+          const lines = ports.map(p =>
+            `- **${p.path}** — ${p.label}${p.virtual ? ' (virtual)' : ''}`
+          );
+          this.postMessage({
+            type: 'serialResult',
+            text: ports.length > 0
+              ? `**Available ports:**\n${lines.join('\n')}`
+              : 'No serial ports detected.',
+          });
+          break;
+        }
+        case 'status': {
+          const isOpen = this.serialManager.isOpen();
+          this.postMessage({
+            type: 'serialResult',
+            text: isOpen
+              ? `**Connected** to ${this.serialManager.getCurrentPath()} @ ${this.serialManager.getCurrentBaud()} bps (${this.serialManager.getMode()})`
+              : '**Not connected.**',
+          });
+          break;
+        }
+        case 'connect': {
+          const port = parts[2];
+          const baud = parseInt(parts[3], 10) || 115200;
+          if (!port) {
+            this.postMessage({ type: 'error', message: 'Usage: /serial connect <port> [baud]' });
+            return;
+          }
+          await this.serialManager.connect(port, baud);
+          this.postMessage({
+            type: 'serialResult',
+            text: `Connected to **${port}** @ ${baud} bps.`,
+          });
+          break;
+        }
+        case 'send': {
+          const data = parts.slice(2).join(' ');
+          if (!data) {
+            this.postMessage({ type: 'error', message: 'Usage: /serial send <data>' });
+            return;
+          }
+          await this.serialManager.send(data, '\n');
+          this.postMessage({
+            type: 'serialResult',
+            text: `Sent: \`${data}\``,
+          });
+          break;
+        }
+        case 'disconnect': {
+          await this.serialManager.disconnect();
+          this.postMessage({
+            type: 'serialResult',
+            text: 'Disconnected.',
+          });
+          break;
+        }
+        case 'tail': {
+          const n = parseInt(parts[2], 10) || 50;
+          const chunks = this.serialManager.getRecentData(n);
+          this.postMessage({
+            type: 'serialResult',
+            text: chunks.length > 0
+              ? `**Last ${chunks.length} chunk(s):**\n\`\`\`\n${chunks.join('')}\n\`\`\``
+              : 'No data in buffer.',
+          });
+          break;
+        }
+        default:
+          this.postMessage({
+            type: 'error',
+            message: `Unknown /serial command: ${cmd}. Available: ports, status, connect, send, disconnect, tail`,
+          });
+      }
+    } catch (e: any) {
+      logError('Serial command failed', e);
+      this.postMessage({
+        type: 'error',
+        message: e.message || 'Serial command failed',
+      });
     }
   }
 
@@ -591,6 +702,28 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-inputValidation-errorBackground);
       color: var(--vscode-inputValidation-errorForeground);
       border: 1px solid var(--vscode-inputValidation-errorBorder);
+    }
+
+    .message.system {
+      align-self: center;
+      background: transparent;
+      color: var(--vscode-foreground);
+      opacity: 0.65;
+      font-size: 0.85em;
+      text-align: center;
+      max-width: 90%;
+      padding: 4px 8px;
+    }
+
+    .message.serial-data {
+      align-self: flex-start;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-panel-border);
+      font-family: var(--vscode-editor-font-family);
+      font-size: 0.88em;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-width: 95%;
     }
 
     /* Turn container — groups assistant text + tool calls */
@@ -1963,6 +2096,57 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function addSystemMessage(text) {
+      hideEmpty();
+      const el = document.createElement('div');
+      el.className = 'message system';
+      el.innerHTML = text.replace(/\n/g, '<br>');
+      messagesEl.appendChild(el);
+      scrollToBottom();
+    }
+
+    var serialDataBuffer = '';
+    var serialDataTimer = null;
+    function addSerialData(data) {
+      serialDataBuffer += data;
+      if (serialDataTimer) { clearTimeout(serialDataTimer); }
+      serialDataTimer = setTimeout(function() {
+        flushSerialData();
+      }, 150);
+    }
+    function flushSerialData() {
+      if (!serialDataBuffer) return;
+      hideEmpty();
+      var el = document.createElement('div');
+      el.className = 'message serial-data';
+      el.textContent = serialDataBuffer;
+      messagesEl.appendChild(el);
+      serialDataBuffer = '';
+      serialDataTimer = null;
+      scrollToBottom();
+    }
+
+    function handleSerialStatus(status) {
+      var text = '';
+      switch (status.kind) {
+        case 'connected':
+          text = '[Serial] Connected to ' + status.path + ' @ ' + status.baud + ' bps (' + status.mode + ')';
+          break;
+        case 'disconnected':
+          text = '[Serial] Disconnected from ' + status.path + (status.reason ? ' (' + status.reason + ')' : '');
+          break;
+        case 'error':
+          text = '[Serial] Error on ' + status.path + ': ' + status.message;
+          break;
+        case 'connecting':
+          text = '[Serial] Connecting to ' + status.path + ' @ ' + status.baud + ' bps...';
+          break;
+      }
+      if (text) {
+        addSystemMessage(text);
+      }
+    }
+
     function getStatusIcon(status) {
       switch (status) {
         case 'running': return '⟳';
@@ -2382,6 +2566,18 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
           scrollToBottom();
           break;
         }
+
+        case 'serialResult':
+          addSystemMessage(msg.text);
+          break;
+
+        case 'serialData':
+          addSerialData(msg.data);
+          break;
+
+        case 'serialStatus':
+          handleSerialStatus(msg.status);
+          break;
       }
     });
 

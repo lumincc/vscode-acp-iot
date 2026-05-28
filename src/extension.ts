@@ -51,6 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.extensionUri,
     sessionManager,
     sessionUpdateHandler,
+    serialManager,
   );
   const chatViewRegistration = vscode.window.registerWebviewViewProvider(
     ChatWebviewProvider.viewType,

@@ -23,6 +23,18 @@ import { getAgentConfigs } from '../config/AgentConfig';
 import { log, logError } from '../utils/Logger';
 import { sendEvent, sendError } from '../utils/TelemetryManager';
 
+const SERIAL_TOOL_CONTRACT = `[System: You have access to the following serial port tools via extMethod:
+- acp:serial_list — list available serial ports
+- acp:serial_status — get current connection status (isOpen, path, baud, mode)
+- acp:serial_connect — connect to a port (params: port, baud)
+- acp:serial_write — send data (params: data, newline)
+- acp:serial_disconnect — disconnect from the port
+- acp:serial_read_snapshot — read recent serial buffer (params: limit)
+
+Serial data and status changes will be pushed via extNotification:
+- acp:serial_data — incoming serial data
+- acp:serial_status_changed — connection status changes (connected/disconnected/error)]`;
+
 export interface SessionInfo {
   sessionId: string;
   agentId: string;
@@ -94,6 +106,9 @@ export class SessionManager extends EventEmitter {
 
   /** Set of session IDs that are currently being replayed via `session/load`. */
   private loadingSessionIds: Set<string> = new Set();
+
+  /** Sessions that have already received the serial tool contract injection. */
+  private serialContractInjected: Set<string> = new Set();
 
   /** Client-side session history (optional — only used for tier-2 tree). */
   private historyStore: SessionHistoryStore | null = null;
@@ -451,8 +466,15 @@ export class SessionManager extends EventEmitter {
 
     log(`sendPrompt: session=${sessionId}, text="${text.substring(0, 50)}..."`);
 
+    // Inject serial tool contract on the first prompt of each session
+    let finalText = text;
+    if (!this.serialContractInjected.has(sessionId)) {
+      this.serialContractInjected.add(sessionId);
+      finalText = SERIAL_TOOL_CONTRACT + '\n\n' + text;
+    }
+
     const prompt: ContentBlock[] = [
-      { type: 'text', text },
+      { type: 'text', text: finalText },
     ];
 
     const response = await connInfo.connection.prompt({

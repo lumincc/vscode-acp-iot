@@ -55,10 +55,15 @@ export class SerialManager {
   private currentMode: SerialMode = 'real';
   private loadResult: SerialPortLoadResult | undefined;
 
+  private ringBuffer: string[] = [];
+  private readonly maxBufferSize = 50000;
+
   constructor() {
     logSerial('SerialManager initialized');
     // Eagerly probe so listPorts/connect share the same outcome.
     void this.getLoadResult();
+    // Auto-buffer all serial data for snapshot reads.
+    this.onDataEmitter.event((e) => this.appendToBuffer(e.data));
   }
 
   // -------------------- Public API --------------------
@@ -81,6 +86,17 @@ export class SerialManager {
 
   public isOpen(): boolean {
     return this.isConnected;
+  }
+
+  /**
+   * Return the most recent serial data from the ring buffer.
+   * @param limit Max number of chunks to return (default: all).
+   */
+  public getRecentData(limit?: number): string[] {
+    if (limit !== undefined && limit > 0) {
+      return this.ringBuffer.slice(-limit);
+    }
+    return [...this.ringBuffer];
   }
 
   /** Returns true when the native `serialport` module loaded successfully. */
@@ -286,8 +302,18 @@ export class SerialManager {
 
   public dispose(): void {
     void this.disconnect();
+    this.ringBuffer = [];
     this.onDataEmitter.dispose();
     this.onStatusEmitter.dispose();
+  }
+
+  private appendToBuffer(data: string): void {
+    this.ringBuffer.push(data);
+    let totalLen = this.ringBuffer.reduce((acc, val) => acc + val.length, 0);
+    while (totalLen > this.maxBufferSize && this.ringBuffer.length > 1) {
+      const removed = this.ringBuffer.shift();
+      totalLen -= removed?.length || 0;
+    }
   }
 
   // -------------------- Internal helpers --------------------

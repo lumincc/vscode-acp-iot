@@ -38,6 +38,7 @@ import { SerialManager } from './SerialManager';
 export class AcpClientImpl implements Client {
   private agent: Agent | null = null;
   private serialDataListener?: { dispose: () => void };
+  private serialStatusListener?: { dispose: () => void };
 
   constructor(
     private readonly fsHandler: FileSystemHandler,
@@ -54,6 +55,15 @@ export class AcpClientImpl implements Client {
         });
       }
     });
+
+    // Subscribe to serial status changes and push to the agent
+    this.serialStatusListener = this.serialManager.onStatus((status) => {
+      if (this.agent && this.agent.extNotification) {
+        this.agent.extNotification('acp:serial_status_changed', status).catch((err) => {
+          logError('Failed to send serial status notification to agent', err);
+        });
+      }
+    });
   }
 
   setAgent(agent: Agent): void {
@@ -67,6 +77,9 @@ export class AcpClientImpl implements Client {
   dispose(): void {
     if (this.serialDataListener) {
       this.serialDataListener.dispose();
+    }
+    if (this.serialStatusListener) {
+      this.serialStatusListener.dispose();
     }
   }
 
@@ -94,6 +107,24 @@ export class AcpClientImpl implements Client {
         }
         await this.serialManager.send(data, newline);
         return { success: true };
+      }
+      case 'acp:serial_list': {
+        const ports = await this.serialManager.listPorts();
+        return { ports };
+      }
+      case 'acp:serial_status': {
+        return {
+          isOpen: this.serialManager.isOpen(),
+          path: this.serialManager.getCurrentPath(),
+          baud: this.serialManager.getCurrentBaud(),
+          mode: this.serialManager.getMode(),
+          nativeAvailable: this.serialManager.isNativeAvailable(),
+        };
+      }
+      case 'acp:serial_read_snapshot': {
+        const limit = params.limit as number | undefined;
+        const chunks = this.serialManager.getRecentData(limit);
+        return { data: chunks.join(''), chunks, count: chunks.length };
       }
       default:
         throw new Error(`Method not found: ${method}`);
