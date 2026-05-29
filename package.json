@@ -55,9 +55,9 @@
         },
         {
           "type": "webview",
-          "id": "embedderMonitor.serialLog",
-          "name": "Embedder Monitor",
-          "contextualTitle": "Monitor"
+          "id": "acp-serial-monitor",
+          "name": "Serial Monitor",
+          "contextualTitle": "Serial Monitor"
         }
       ]
     },

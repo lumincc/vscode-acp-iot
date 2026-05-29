@@ -3,7 +3,7 @@ import { SerialManager, SerialPortInfo, SerialStatus } from '../core/SerialManag
 import { logSerial, logSerialDebug, logSerialError } from '../utils/Logger';
 
 export class SerialMonitorViewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'embedderMonitor.serialLog';
+  public static readonly viewType = 'acp-serial-monitor';
 
   private view?: vscode.WebviewView;
   private dataListener?: vscode.Disposable;

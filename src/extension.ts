@@ -274,7 +274,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Focus Embedder Monitor
   const focusEmbedderMonitorCmd = vscode.commands.registerCommand('embedderMonitor.focus', () => {
-    vscode.commands.executeCommand('embedderMonitor.serialLog.focus');
+    vscode.commands.executeCommand('acp-serial-monitor.focus');
   });
 
   // Embedder Monitor diagnostics: print mode, native load state, current
